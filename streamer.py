@@ -21,10 +21,12 @@ class Streamer:
         # for now I'm just sending the raw application-level data in one UDP payload
         length = len(data_bytes)
         index = 0
+        seq = index
         while(length - index > 1472):
             data = data_bytes[index:index+1472]
             self.socket.sendto(data, (self.dst_ip, self.dst_port))
             index += 1472
+            print("sequence number"+str(seq))
         data = data_bytes[index:length]
         self.socket.sendto(data, (self.dst_ip, self.dst_port))
 

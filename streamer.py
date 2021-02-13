@@ -6,7 +6,9 @@ import struct
 
 class Streamer:
     def __init__(self, dst_ip, dst_port,
+                 #None type
                  src_ip=INADDR_ANY, src_port=0, recv_buffer={}):
+
         """Default values listen on all network interfaces, chooses a random source port,
            and does not introduce any simulated packet loss."""
         self.socket = LossyUDP()

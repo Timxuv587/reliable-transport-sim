@@ -3,6 +3,7 @@ from lossy_socket import LossyUDP
 # do not import anything else from socket except INADDR_ANY
 from socket import INADDR_ANY
 import struct
+import concurrent.futures
 
 class Streamer:
     def __init__(self, dst_ip, dst_port,
@@ -19,6 +20,25 @@ class Streamer:
         self.seq = []
         self.current_recv_seq = 0
         self.current_send_seq = 0
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        executor.submit(self.listener)
+
+    def listener(self):
+        while not self.closed:  # a later hint will explain self.closed
+            try:
+                data, addr = self.socket.recvfrom()
+                # store the data in the receive buffer
+                data_str = data.decode('utf-8')
+                seq_number = int(data_str.split(";")[0].split(":")[1])
+                true_data = data_str.split(";")[1].encode()
+
+                self.recv_buffer[seq_number] = true_data
+                self.seq.append(seq_number)
+
+
+            except Exception as e:
+                print("listener died!")
+                print(e)
 
     def send(self, data_bytes: bytes) -> None:
         """Note that data_bytes can be larger than one packet."""
@@ -55,26 +75,29 @@ class Streamer:
         # your code goes here!  The code below should be changed!
 
         #If data out of order, keep receiving till the packet of current sequence number is received. 
-        while(self.current_recv_seq not in self.seq):
+        # while(self.current_recv_seq not in self.seq):
             # this sample code just calls the recvfrom method on the LossySocket
-            data, addr = self.socket.recvfrom()
+            # data, addr = self.socket.recvfrom()
 
-            #header name and header value is seperated by ":"
-            #All headers and the true data content is seperate by ";"
-            data_str = data.decode('utf-8')
-            seq_number = int(data_str.split(";")[0].split(":")[1])
-            true_data = data_str.split(";")[1].encode()
-
-            #Store data to buffer base on sequence number
-            self.recv_buffer[seq_number] = true_data
-            self.seq.append(seq_number)
+            # #header name and header value is seperated by ":"
+            # #All headers and the true data content is seperate by ";"
+            # data_str = data.decode('utf-8')
+            # seq_number = int(data_str.split(";")[0].split(":")[1])
+            # true_data = data_str.split(";")[1].encode()
+            #
+            # #Store data to buffer base on sequence number
+            # self.recv_buffer[seq_number] = true_data
+            # self.seq.append(seq_number)
 
         #Return data that match current seq number
-        self.current_recv_seq += 1
-        return  self.recv_buffer[self.current_recv_seq-1]
+        if self.current_recv_seq in self.seq:
+            self.current_recv_seq += 1
+            return  self.recv_buffer[self.current_recv_seq-1]
+
 
     def close(self) -> None:
         """Cleans up. It should block (wait) until the Streamer is done with all
            the necessary ACKs and retransmissions"""
         # your code goes here, especially after you add ACKs and retransmissions.
-        pass
+        self.closed = True
+        self.socket.stoprecv()

@@ -24,12 +24,15 @@ class Streamer:
         self.closed = False
         self.src_ip = src_ip
         self.src_port = src_port
-        self.ack = False
+        self.ack_timeout = 0.25
+
+
+
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         executor.submit(self.listener)
 
 
-
+    ack = False
     def send(self, data_bytes: bytes) -> None:
         """Note that data_bytes can be larger than one packet."""
         # Your code goes here!  The code below should be changed!
@@ -57,8 +60,16 @@ class Streamer:
         new_data = (header + data_bytes[index:length].decode()).encode()
         self.current_send_seq += 1
         self.socket.sendto(new_data, (self.dst_ip, self.dst_port))
-        while not self.ack:
-            time.sleep(0.01)
+        start = time.time()
+        #time out
+        while not self.ack and time.time() - start >= 0.25:
+
+            self.socket.sendto(new_data, (self.dst_ip, self.dst_port))
+
+            # time.sleep(0.01)
+            self.ack = False
+
+
 
 
     def listener(self):
@@ -68,8 +79,12 @@ class Streamer:
                 data, addr = self.socket.recvfrom()
                 # store the data in the receive buffer
                 data_str = data.decode('utf-8')
+
                 if data_str == "ACK":
                     self.ack = True
+                    # print(self.ack)
+                    # self.send()
+
                     # break
                 else:
                     seq_number = int(data_str.split(";")[0].split(":")[1])
@@ -77,6 +92,7 @@ class Streamer:
 
                     self.recv_buffer[seq_number] = true_data
                     self.seq.append(seq_number)
+
 
             except Exception as e:
                 print("listener died!")
@@ -106,7 +122,7 @@ class Streamer:
             continue
         header = "ACK"
         self.current_recv_seq += 1
-        self.socket.sendto(header.encode(), (self.src_ip, self.src_port))
+        self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
         return self.recv_buffer[self.current_recv_seq-1]
 
 
@@ -114,5 +130,9 @@ class Streamer:
         """Cleans up. It should block (wait) until the Streamer is done with all
            the necessary ACKs and retransmissions"""
         # your code goes here, especially after you add ACKs and retransmissions.
+        header = "FIN"
+        self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
         self.closed = True
+
         self.socket.stoprecv()
+

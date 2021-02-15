@@ -5,6 +5,7 @@ from socket import INADDR_ANY
 # import struct
 import time
 import concurrent.futures
+import hashlib
 
 class Streamer:
     def __init__(self, dst_ip, dst_port,
@@ -58,10 +59,11 @@ class Streamer:
             l = len(header.encode())
         header = "DataSeq:" + str(self.current_send_seq) + ";"
         new_data = (header + data_bytes[index:length].decode()).encode()
+        hash_new_data = hashlib.md5().update(new_data)
         #time out
         while not self.ack:
             start = time.time()
-            self.socket.sendto(new_data, (self.dst_ip, self.dst_port))
+            self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
             while time.time() - start < 0.25:
                 if self.ack:
                     break
@@ -80,9 +82,12 @@ class Streamer:
                 # self.ack = False
                 data, addr = self.socket.recvfrom()
                 # store the data in the receive buffer
-                data_str = data.decode('utf-8')
+                data_hash = hashlib.md5().digest(data)
+                data_str = data_hash.decode('utf-8')
 
                 if data_str.split(";")[0] == "ACK" and self.current_send_seq == int(data_str.split(";")[1].split(":")[1]):
+                    self.ack = True
+                elif data_str == "FIN":
                     self.ack = True
                 else:
                     seq_number = int(data_str.split(";")[0].split(":")[1])
@@ -125,6 +130,7 @@ class Streamer:
 
 
         self.current_recv_seq += 1
+        return self.recv_buffer[self.current_recv_seq - 1]
         
 
 
@@ -133,13 +139,19 @@ class Streamer:
            the necessary ACKs and retransmissions"""
         # your code goes here, especially after you add ACKs and retransmissions.
         header = "FIN"
-        self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
         self.ack = False
+        self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
 
-        start = time.time()
+        # start = time.time()
         # time out
-        while not self.ack and time.time() - start >= 0.25:
+        while not self.ack:
+            # start = time.time()
             self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+
+            # while time.time() - start < 0.25:
+            #     if self.ack:
+            #         break
+
         # wait two seconds
         time.sleep(2)
         self.closed = True

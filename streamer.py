@@ -92,9 +92,11 @@ class Streamer:
                 else:
                     seq_number = int(data_str.split(";")[0].split(":")[1])
                     true_data = data_str.split(";")[1].encode()
-
+                    print(seq_number)
                     self.recv_buffer[seq_number] = true_data
                     self.seq.append(seq_number)
+                    header = "ACK"
+                    self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
 
 
             except Exception as e:
@@ -123,9 +125,9 @@ class Streamer:
         #Return data that match current seq number
             # if self.current_recv_seq in self.seq:
             continue
-        header = "ACK"
+        # header = "ACK"
         self.current_recv_seq += 1
-        self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+        # self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
         return self.recv_buffer[self.current_recv_seq-1]
 
 
@@ -141,7 +143,8 @@ class Streamer:
         # time out
         while not self.ack and time.time() - start >= 0.25:
             self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+        # wait two seconds
+        time.sleep(2)
         self.closed = True
-
         self.socket.stoprecv()
 

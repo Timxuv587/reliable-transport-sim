@@ -58,8 +58,6 @@ class Streamer:
             l = len(header.encode())
         header = "DataSeq:" + str(self.current_send_seq) + ";"
         new_data = (header + data_bytes[index:length].decode()).encode()
-        self.current_send_seq += 1
-        
         #time out
         while not self.ack:
             start = time.time()
@@ -70,6 +68,7 @@ class Streamer:
             # time.sleep(0.01)
 
         self.ack = False
+        self.current_send_seq += 1
 
 
 
@@ -83,19 +82,17 @@ class Streamer:
                 # store the data in the receive buffer
                 data_str = data.decode('utf-8')
 
-                if data_str == "ACK":
+                if data_str.split(";")[0] == "ACK" and self.current_send_seq == int(data_str.split(";")[1].split(":")[1]):
                     self.ack = True
-                    # print(self.ack)
-                    # self.send()
-
-                    # break
                 else:
                     seq_number = int(data_str.split(";")[0].split(":")[1])
                     true_data = data_str.split(";")[1].encode()
                     print(seq_number)
                     self.recv_buffer[seq_number] = true_data
                     self.seq.append(seq_number)
-                    header = "ACK"
+
+                    header = "ACK;" + "DataSeq:" + str(seq_number)
+
                     self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
 
 
@@ -125,10 +122,10 @@ class Streamer:
         #Return data that match current seq number
             # if self.current_recv_seq in self.seq:
             continue
-        # header = "ACK"
+
+
         self.current_recv_seq += 1
-        # self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
-        return self.recv_buffer[self.current_recv_seq-1]
+        
 
 
     def close(self) -> None:

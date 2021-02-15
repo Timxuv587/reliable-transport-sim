@@ -33,6 +33,14 @@ class Streamer:
         executor.submit(self.listener)
 
 
+
+    #Packet format:
+    #Normal packet
+    #HASH;DataSeq:xxxxxxx;TRUE_DATA
+    #ACK packet
+    #HASH;ACK;DataSeq:xxxxxx
+
+
     ack = False
     def send(self, data_bytes: bytes) -> None:
         """Note that data_bytes can be larger than one packet."""
@@ -44,33 +52,45 @@ class Streamer:
         #Create a header with current sequence
         #header name and header value is seperated by ":"
         #All headers and the true data content is seperate by ";"
-        header = "DataSeq:" + str(self.current_send_seq) + ";"
+        seq_counter = self.current_send_seq
+        header = ";DataSeq:" + str(seq_counter) + ";"
+        
         #Get the header length in order to accomodate packet size
-        l = len(header.encode())
-        while length - index > 1472 - len(header.encode()):
+        l = len(header.encode()) + 16
+        send_packet = []
+        while length - index > 1472 - len(header.encode()) - 16:
             data = data_bytes[index:index+1472-l]
             #Decode data to string, combine with header, and encode to bytes
             new_data = (header+data.decode()).encode()
-            self.socket.sendto(new_data, (self.dst_ip, self.dst_port))
+            m = hashlib.md5()
+            m.update(new_data)
+            hash_new_data = m.digest() + new_data
+            send_packet.append(hash_new_data)
             index += 1472 - l
             #Update seq num and header
-            self.current_send_seq += 1
-            header = "DataSeq:" + str(self.current_send_seq) + ";"
-            l = len(header.encode())
-        header = "DataSeq:" + str(self.current_send_seq) + ";"
+            seq_counter += 1
+            header = ";DataSeq:" + str(seq_counter) + ";"
+            l = len(header.encode()) + 16
+        header = ";DataSeq:" + str(seq_counter) + ";"
         new_data = (header + data_bytes[index:length].decode()).encode()
-        hash_new_data = hashlib.md5().update(new_data)
+        m = hashlib.md5()
+        m.update(new_data)
+        hash_new_data = m.digest() + new_data
+        send_packet.append(hash_new_data)
         #time out
-        while not self.ack:
-            start = time.time()
-            self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
-            while time.time() - start < 0.25:
-                if self.ack:
-                    break
-            # time.sleep(0.01)
+        for p in send_packet:
+            while not self.ack:
+                self.socket.sendto(p, (self.dst_ip, self.dst_port))
+                start = time.time()
+                while time.time() - start < 0.25:
+                    if self.ack:
+                        break
+                # time.sleep(0.01)
+            self.ack = False
+            self.current_send_seq += 1
 
-        self.ack = False
-        self.current_send_seq += 1
+        
+        
 
 
 
@@ -82,23 +102,33 @@ class Streamer:
                 # self.ack = False
                 data, addr = self.socket.recvfrom()
                 # store the data in the receive buffer
-                data_hash = hashlib.md5().digest(data)
-                data_str = data_hash.decode('utf-8')
+                #data_str = data.decode('utf-8')
+                hash = data[0:16]
+                m = hashlib.md5()
+                m.update(data[16:])
+                received_hash = m.digest()
+                if len(data) != 0:
+                    if(hash == received_hash):
+                        data_str = data[16:].decode()
+                        if data_str.split(";")[1] == "ACK":
+                            if self.current_send_seq == int(data_str.split(";")[2].split(":")[1]):
+                                self.ack = True
+                        elif data_str.split(";")[1] == "FIN":
+                                self.ack = True
+                        else:
+                            seq_number = int(data_str.split(";")[1].split(":")[1])
+                            true_data = data_str.split(";")[2].encode()
+                            self.recv_buffer[seq_number] = true_data
+                            self.seq.append(seq_number)
 
-                if data_str.split(";")[0] == "ACK" and self.current_send_seq == int(data_str.split(";")[1].split(":")[1]):
-                    self.ack = True
-                elif data_str == "FIN":
-                    self.ack = True
-                else:
-                    seq_number = int(data_str.split(";")[0].split(":")[1])
-                    true_data = data_str.split(";")[1].encode()
-                    print(seq_number)
-                    self.recv_buffer[seq_number] = true_data
-                    self.seq.append(seq_number)
-
-                    header = "ACK;" + "DataSeq:" + str(seq_number)
-
-                    self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+                            header = ";ACK;" + "DataSeq:" + str(seq_number)
+                            m = hashlib.md5()
+                            m.update(header.encode())
+                            hash_new_data = m.digest() + header.encode()
+                            self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
+                    else:
+                        print("bit drop detect")
+                        print(str(received_hash) + " and I get " + str(data[0:16]))
 
 
             except Exception as e:
@@ -138,15 +168,18 @@ class Streamer:
         """Cleans up. It should block (wait) until the Streamer is done with all
            the necessary ACKs and retransmissions"""
         # your code goes here, especially after you add ACKs and retransmissions.
-        header = "FIN"
+        header = ";FIN"
+        m = hashlib.md5()
+        m.update(header.encode())
+        hash_new_data = m.digest() + header.encode()
         self.ack = False
-        self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+        self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
 
         # start = time.time()
         # time out
         while not self.ack:
             # start = time.time()
-            self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+            self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
 
             # while time.time() - start < 0.25:
             #     if self.ack:

@@ -59,15 +59,16 @@ class Streamer:
         header = "DataSeq:" + str(self.current_send_seq) + ";"
         new_data = (header + data_bytes[index:length].decode()).encode()
         self.current_send_seq += 1
-        self.socket.sendto(new_data, (self.dst_ip, self.dst_port))
-        start = time.time()
+        
         #time out
-        while not self.ack and time.time() - start >= 0.25:
-
+        while not self.ack:
+            start = time.time()
             self.socket.sendto(new_data, (self.dst_ip, self.dst_port))
-
+            while time.time() - start < 0.25:
+                if self.ack:
+                    break
             # time.sleep(0.01)
-            self.ack = False
+        self.ack = False
 
 
 

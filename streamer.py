@@ -36,7 +36,7 @@ class Streamer:
     def send(self, data_bytes: bytes) -> None:
         """Note that data_bytes can be larger than one packet."""
         # Your code goes here!  The code below should be changed!
-
+        self.ack = False
         # for now I'm just sending the raw application-level data in one UDP payload
         length = len(data_bytes)
         index = 0
@@ -66,8 +66,10 @@ class Streamer:
                 if self.ack:
                     break
             # time.sleep(0.01)
+
         self.ack = False
         self.current_send_seq += 1
+
 
 
 
@@ -129,6 +131,12 @@ class Streamer:
         # your code goes here, especially after you add ACKs and retransmissions.
         header = "FIN"
         self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
+        self.ack = False
+
+        start = time.time()
+        # time out
+        while not self.ack and time.time() - start >= 0.25:
+            self.socket.sendto(header.encode(), (self.dst_ip, self.dst_port))
         self.closed = True
 
         self.socket.stoprecv()

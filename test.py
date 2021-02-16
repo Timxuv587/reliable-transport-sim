@@ -2,7 +2,7 @@ from streamer import Streamer
 import sys
 import lossy_socket
 # reduce smallest possible value
-NUMS=1000
+NUMS=100000
 
 
 def receive(s):
@@ -63,10 +63,10 @@ def host2(listen_port, remote_port):
 
 
 def main():
-    lossy_socket.sim = lossy_socket.SimulationParams(loss_rate=0.1, corruption_rate=0.1,
-                                                     max_delivery_delay=0.1,
+    lossy_socket.sim = lossy_socket.SimulationParams(loss_rate=0.2, corruption_rate=0.2,
+                                                     max_delivery_delay=0.2,
                                                      #become_reliable_after = 10.0
-                                                     become_reliable_after=10.0)
+                                                     become_reliable_after=1000.0)
 
     if len(sys.argv) < 4:
         print("usage is: python3 test.py [port1] [port2] [1|2]")

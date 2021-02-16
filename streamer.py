@@ -86,6 +86,7 @@ class Streamer:
         m.update(new_data)
         hash_new_data = m.digest() + new_data
         self.send_data[self.current_send_seq] = hash_new_data
+        self.current_send_seq += 1
         self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
         # send_packet.append(hash_new_data)
         #time out
@@ -104,7 +105,7 @@ class Streamer:
     def ack_listener(self):
         while not self.closed:
             with self.lock:
-                while self.current_send_seq != self.current_ack_seq:
+                if self.current_send_seq != self.current_ack_seq:
                     start = time.time()
                     while time.time() - start < 0.25:
                         if self.ack:
@@ -112,7 +113,7 @@ class Streamer:
                             break
 
                     if not self.ack:
-                        index = self.current_ack_seq + 1
+                        index = self.current_ack_seq
                         while index <= self.current_send_seq:
                             self.socket.sendto(self.send_data[index], (self.dst_ip, self.dst_port))
                             index += 1
@@ -149,7 +150,7 @@ class Streamer:
                                 m.update(header.encode())
                                 hash_new_data = m.digest() + header.encode()
                                 self.socket.sendto(hash_new_data, (self.dst_ip, self.dst_port))
-                                print(self.ack)
+
                         else:
                             print("bit drop detect")
                             print(str(received_hash) + " and I get " + str(data[0:16]))
